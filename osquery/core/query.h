@@ -41,6 +41,12 @@ struct QueryLogItem {
   /// Optional snapshot results, no differential applied.
   QueryDataTyped snapshot_results;
 
+  /// Results from the previous epoch that were not reported yet (if this is a new epoch).
+  DiffResults previous_remaining;
+
+  /// Counter for the previous_epoch_remaining (if non-empty);
+  uint64_t previous_remaining_counter;
+
   /// The name of the scheduled query.
   std::string name;
 
@@ -50,11 +56,14 @@ struct QueryLogItem {
   /// The time that the query was executed, seconds as UNIX time.
   uint64_t time{0};
 
-  /// The epoch at the time the query was executed
+  /// The epoch the query results are placed in ("current epoch")
   uint64_t epoch{};
 
   /// Query execution counter for current epoch
   uint64_t counter{0};
+
+  /// The epoch when the query previously had results
+  uint64_t previous_epoch{};
 
   /// The time that the query was executed, an ASCII string.
   std::string calendar_time;
@@ -87,11 +96,11 @@ Status serializeQueryLogItem(const QueryLogItem& item, JSON& doc);
  * @brief Serialize a QueryLogItem object into a JSON string.
  *
  * @param item the QueryLogItem to serialize.
- * @param json [output] the output JSON string.
+ * @param json_items [output] the output JSON string(s).
  *
  * @return Status indicating the success or failure of the operation.
  */
-Status serializeQueryLogItemJSON(const QueryLogItem& item, std::string& json);
+Status serializeQueryLogItemJSON(const QueryLogItem& item, std::vector<std::string>& json_items);
 
 /**
  * @brief Serialize a QueryLogItem object into a JSON document containing
@@ -158,15 +167,17 @@ class Query {
   /**
    * @brief Get the query invocation counter.
    *
-   * This method returns query invocation counter. If the query is a new query,
-   * 0 is returned. Otherwise the counter associated with the query is retrieved
-   * from database and incremented by 1.
+   * This method returns query invocation counter. If the query is returning all records,
+   * 0 is returned. If the query is a new query but not returning all records, 1 is returned.
+   * Otherwise the counter associated with the query is retrieved from database and
+   * incremented by 1.
    *
+   * @param all_records Whether or not the query is including all records
    * @param new_query Whether or not the query is new.
    *
    * @return the query invocation counter.
    */
-  uint64_t getQueryCounter(bool new_query) const;
+  uint64_t getQueryCounter(bool all_records, bool new_query) const;
 
   /**
    * @brief Check if a given scheduled query exists in the database.
@@ -184,7 +195,8 @@ class Query {
 
   /// Determines if this is a first run or new query.
   void getQueryStatus(uint64_t epoch,
-                      bool& fresh_results,
+		      uint64_t& previous_epoch,
+                      bool& new_epoch,
                       bool& new_query) const;
 
   /// Increment and return the query counter.
@@ -215,24 +227,18 @@ class Query {
    * indicating what rows in the query's results have changed.
    *
    * @param qd the QueryDataTyped object containing query results to store.
-   * @param epoch the epoch associated with QueryData
-   * @param counter the output that holds the query execution counter.
-   * @param dr an output to a DiffResults object populated based on last run.
-   * @param calculate_diff default true to populate dr.
+   * @param item the QueryLogItem associated with qd (QueryDataType)
+   * @param calculate_diff default true to populate item.results and previous_remaining.
    *
    * @return the success or failure of the operation.
    */
   Status addNewResults(QueryDataTyped qd,
-                       uint64_t epoch,
-                       uint64_t& counter,
-                       DiffResults& dr,
+                       QueryLogItem& item,
                        bool calculate_diff = true) const;
 
   /// A version of adding new results for events-based queries.
   Status addNewEvents(QueryDataTyped current_qd,
-                      const uint64_t current_epoch,
-                      uint64_t& counter,
-                      DiffResults& dr) const;
+		      QueryLogItem& item) const;
 
   /**
    * @brief The most recent result set for a scheduled query.

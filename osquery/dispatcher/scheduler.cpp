@@ -155,16 +155,13 @@ Status launchQuery(const std::string& name, const ScheduledQuery& query) {
   // Comparisons and stores must include escaped data.
   sql.escapeResults();
   Status status;
-  DiffResults& diff_results = item.results;
   // Add this execution's set of results to the database-tracked named query.
   // We can then ask for a differential from the last time this named query
   // was executed by exact matching each row.
   if (!FLAGS_events_optimize || !sql.eventBased()) {
-    status = dbQuery.addNewResults(
-        std::move(sql.rowsTyped()), item.epoch, item.counter, diff_results);
+    status = dbQuery.addNewResults(std::move(sql.rowsTyped()), item);
   } else {
-    status = dbQuery.addNewEvents(
-        std::move(sql.rowsTyped()), item.epoch, item.counter, diff_results);
+    status = dbQuery.addNewEvents(std::move(sql.rowsTyped()), item);
   }
 
   if (!status.ok()) {
@@ -175,10 +172,11 @@ Status launchQuery(const std::string& name, const ScheduledQuery& query) {
   }
 
   if (!query.reportRemovedRows()) {
-    diff_results.removed.clear();
+    item.results.removed.clear();
+    item.previous_remaining.removed.clear();
   }
 
-  if (diff_results.hasNoResults()) {
+  if (item.results.hasNoResults() && item.previous_remaining.hasNoResults()) {
     // No diff results or events to emit.
     return status;
   }

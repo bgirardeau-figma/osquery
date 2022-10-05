@@ -421,9 +421,7 @@ Status logQueryLogItem(const QueryLogItem& results,
   if (FLAGS_logger_event_type) {
     status = serializeQueryLogItemAsEventsJSON(results, json_items);
   } else {
-    std::string json;
-    status = serializeQueryLogItemJSON(results, json);
-    json_items.emplace_back(json);
+    status = serializeQueryLogItemJSON(results, json_items);
   }
   if (!status.ok()) {
     return status;
