@@ -130,7 +130,7 @@ Status Query::addNewEvents(QueryDataTyped current_qd,
 			   QueryLogItem& item) const {
   bool new_epoch = false;
   bool new_query = false;
-  getQueryStatus(item.epoch, new_epoch, new_query, item.previous_epoch);
+  getQueryStatus(item.epoch, item.previous_epoch, new_epoch, new_query);
   if (new_epoch) {
     auto status = setDatabaseValue(kQueries, name_, "[]");
     if (!status.ok()) {
@@ -139,7 +139,7 @@ Status Query::addNewEvents(QueryDataTyped current_qd,
   }
   item.results.added = std::move(current_qd);
   if (!item.results.added.empty()) {
-    auto status = incrementCounter(false, new_epoch || new_query, counter);
+    auto status = incrementCounter(false, new_epoch || new_query, item.counter);
     if (!status.ok()) {
       return status;
     }
@@ -151,8 +151,8 @@ Status Query::addNewResults(QueryDataTyped qd,
                             const uint64_t epoch,
                             uint64_t& counter) const {
   QueryLogItem item;
-  item.epoch = epoch
-  return addNewResults(std::move(qd), item, false)
+  item.epoch = epoch;
+  return addNewResults(std::move(qd), item, false);
 }
 
 Status Query::addNewResults(QueryDataTyped current_qd,
@@ -160,14 +160,14 @@ Status Query::addNewResults(QueryDataTyped current_qd,
                             bool calculate_diff) const {
   bool new_epoch = false;
   bool new_query = false;
-  getQueryStatus(item.epoch, new_epoch, new_query, item.previous_epoch);
+  getQueryStatus(item.epoch, item.previous_epoch, new_epoch, new_query);
 
   // Use a 'target' avoid copying the query data when serializing and saving.
   // If a differential is requested and needed the target remains the original
   // query data, otherwise the content is moved to the differential's added set.
   const auto* target_gd = &current_qd;
   bool update_db = true;
-  if (calculate_diff) {
+  if (!new_query && calculate_diff) {
     // Get the rows from the last run of this query name.
     QueryDataSet previous_qd;
     auto status = getPreviousQueryResults(previous_qd);
@@ -189,7 +189,7 @@ Status Query::addNewResults(QueryDataTyped current_qd,
       item.results = diff(previous_qd, current_qd);
     }
     if (!new_epoch && item.results.added.empty() && item.results.removed.empty()) {
-      update_db = false
+      update_db = false;
     }
   } else {
     item.results.added = std::move(current_qd);
@@ -216,7 +216,7 @@ Status Query::addNewResults(QueryDataTyped current_qd,
     }
   }
 
-  if (new_epoch && !(previous_remaining.added.empty() && previous_remaining.removed.empty())) {
+  if (new_epoch && !(item.previous_remaining.added.empty() && item.previous_remaining.removed.empty())) {
     auto status = incrementCounter(false, false, item.previous_remaining_counter);
     if (!status.ok()) {
       return status;
@@ -307,14 +307,14 @@ inline void getLegacyFieldsAndDecorations(const JSON& doc, QueryLogItem& item) {
 }
 
 Status serializeQueryLogItem(bool is_previous_remaining, const QueryLogItem& item, JSON& doc) {
-  DiffResults& dr = item.results;
+  const auto* dr = &item.results;
   if (is_previous_remaining) {
-    dr = item.previous_remaining;
+    dr = &item.previous_remaining;
   }  
-  if (dr.added.size() > 0 || dr.removed.size() > 0) {
+  if (dr->added.size() > 0 || dr->removed.size() > 0) {
     auto obj = doc.getObject();
     auto status =
-      serializeDiffResults(dr, doc, obj, FLAGS_logger_numerics);
+      serializeDiffResults(*dr, doc, obj, FLAGS_logger_numerics);
     if (!status.ok()) {
       return status;
     }
@@ -351,20 +351,15 @@ Status serializeEvent(bool is_previous_remaining,
   return Status::success();
 }
 
-Status serializeQueryLogItemAsEvents(const QueryLogItem& item, JSON& doc) {
-  serializeQueryLogItemAsEvents(true, item, doc);
-  serializeQueryLogItemAsEvents(false, item, doc);
-}
-
-Status serializeQueryLogItemAsEvents(bool is_previous_remaining, const QueryLogItem& item, JSON& doc) {
+Status _serializeQueryLogItemAsEvents(bool is_previous_remaining, const QueryLogItem& item, JSON& doc) {
   auto temp_doc = JSON::newObject();
-  DiffResults& dr = item.results;
+  const auto* dr = &item.results;
   if (is_previous_remaining) {
-    dr = item.previous_remaining;
+    dr = &item.previous_remaining;
   }
-  if (!dr.added.empty() || !dr.removed.empty()) {
+  if (!dr->added.empty() || !dr->removed.empty()) {
     auto status = serializeDiffResults(
-        dr, temp_doc, temp_doc.doc(), FLAGS_logger_numerics);
+        *dr, temp_doc, temp_doc.doc(), FLAGS_logger_numerics);
     if (!status.ok()) {
       return status;
     }
@@ -392,25 +387,15 @@ Status serializeQueryLogItemAsEvents(bool is_previous_remaining, const QueryLogI
   return Status::success();
 }
 
-Status serializeQueryLogItemJSON(const QueryLogItem& item, std::vector<std::string>& json_items) {
-  std::string json;
-  auto status = serializeQueryLogItemJSON(true, item, json);
+Status serializeQueryLogItemAsEvents(const QueryLogItem& item, JSON& doc) {
+  auto status = _serializeQueryLogItemAsEvents(true, item, doc);
   if (!status.ok()) {
-    return status
+    return status;
   }
-  if (!json.empty()) {
-    json_items.emplace_back(json);
-  }
-  status = serializeQueryLogItemJSON(false, item, json);
-  if (!status.ok()) {
-    return status
-  }
-  if (!json.empty()) {
-    json_items.emplace_back(json);
-  }
+  return _serializeQueryLogItemAsEvents(false, item, doc);
 }
 
-Status serializeQueryLogItemJSON(bool is_previous_remaining, const QueryLogItem& item, std::string& json) {
+Status _serializeQueryLogItemJSON(bool is_previous_remaining, const QueryLogItem& item, std::string& json) {
   auto doc = JSON::newObject();
   auto status = serializeQueryLogItem(is_previous_remaining, item, doc);
   if (!status.ok()) {
@@ -418,6 +403,25 @@ Status serializeQueryLogItemJSON(bool is_previous_remaining, const QueryLogItem&
   }
 
   return doc.toString(json);
+}
+
+Status serializeQueryLogItemJSON(const QueryLogItem& item, std::vector<std::string>& json_items) {
+  std::string json;
+  auto status = _serializeQueryLogItemJSON(true, item, json);
+  if (!status.ok()) {
+    return status;
+  }
+  if (!json.empty()) {
+    json_items.emplace_back(json);
+  }
+  status = _serializeQueryLogItemJSON(false, item, json);
+  if (!status.ok()) {
+    return status;
+  }
+  if (!json.empty()) {
+    json_items.emplace_back(json);
+  }
+  return Status::success();
 }
 
 Status serializeQueryLogItemAsEventsJSON(const QueryLogItem& item,

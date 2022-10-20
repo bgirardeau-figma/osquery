@@ -448,9 +448,7 @@ Status logSnapshotQuery(const QueryLogItem& item) {
   if (FLAGS_logger_snapshot_event_type) {
     status = serializeQueryLogItemAsEventsJSON(item, json_items);
   } else {
-    std::string json;
-    status = serializeQueryLogItemJSON(item, json);
-    json_items.emplace_back(json);
+    status = serializeQueryLogItemJSON(item, json_items);
   }
   if (!status.ok()) {
     return status;

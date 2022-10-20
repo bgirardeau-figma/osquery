@@ -90,7 +90,7 @@ struct QueryLogItem {
  *
  * @return Status indicating the success or failure of the operation.
  */
-Status serializeQueryLogItem(const QueryLogItem& item, JSON& doc);
+Status serializeQueryLogItem(bool is_previous_remaining, const QueryLogItem& item, JSON& doc);
 
 /**
  * @brief Serialize a QueryLogItem object into a JSON string.
@@ -168,9 +168,9 @@ class Query {
    * @brief Get the query invocation counter.
    *
    * This method returns query invocation counter. If the query is returning all records,
-   * 0 is returned. If the query is a new query but not returning all records, 1 is returned.
-   * Otherwise the counter associated with the query is retrieved from database and
-   * incremented by 1.
+   * the counter resets to 0. If the query is a new query, but not returning all records,
+   * the counter resets to 1. Otherwise the counter associated with the query is retrieved
+   * from the  database and incremented by 1.
    *
    * @param all_records Whether or not the query is including all records
    * @param new_query Whether or not the query is new.
@@ -200,7 +200,7 @@ class Query {
                       bool& new_query) const;
 
   /// Increment and return the query counter.
-  Status incrementCounter(bool reset, uint64_t& counter) const;
+  Status incrementCounter(bool all_records, bool new_query, uint64_t& counter) const;
 
   /**
    * @brief Add a new set of results to the persistent storage.

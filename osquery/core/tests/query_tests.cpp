@@ -60,10 +60,10 @@ TEST_F(QueryTests, test_get_query_status) {
   auto cf = Query("query_status", query);
 
   // We have never seen this query before (it has no results yet either).
-  bool fresh_results = false;
+  bool new_epoch = false;
   bool new_query = false;
-  cf.getQueryStatus(100, fresh_results, new_query);
-  EXPECT_TRUE(fresh_results);
+  cf.getQueryStatus(100, new_epoch, new_query);
+  EXPECT_TRUE(new_epoch);
   EXPECT_TRUE(new_query);
 
   // Add results for this query (this action is not under test).
@@ -72,17 +72,17 @@ TEST_F(QueryTests, test_get_query_status) {
   ASSERT_TRUE(status.ok());
 
   // The query has results and the query text has not changed.
-  fresh_results = false;
+  new_epoch = false;
   new_query = false;
-  cf.getQueryStatus(100, fresh_results, new_query);
-  EXPECT_FALSE(fresh_results);
+  cf.getQueryStatus(100, new_epoch, new_query);
+  EXPECT_FALSE(new_epoch);
   EXPECT_FALSE(new_query);
 
   // The epoch changed so the previous results are invalid.
-  fresh_results = false;
+  new_epoch = false;
   new_query = false;
-  cf.getQueryStatus(101, fresh_results, new_query);
-  EXPECT_TRUE(fresh_results);
+  cf.getQueryStatus(101, new_epoch, new_query);
+  EXPECT_TRUE(new_eopch);
   EXPECT_FALSE(new_query);
 
   // Add results for the new epoch (this action is not under test).
@@ -90,12 +90,12 @@ TEST_F(QueryTests, test_get_query_status) {
   ASSERT_TRUE(status.ok());
 
   // The epoch is the same but the query text has changed.
-  fresh_results = false;
+  new_epoch = false;
   new_query = false;
   query.query += " LIMIT 1";
   auto cf2 = Query("query_status", query);
   cf2.getQueryStatus(101, fresh_results, new_query);
-  EXPECT_FALSE(fresh_results);
+  EXPECT_FALSE(new_epoch);
   EXPECT_TRUE(new_query);
 }
 
