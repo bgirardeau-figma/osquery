@@ -188,7 +188,7 @@ Status Query::addNewResults(QueryDataTyped current_qd,
     } else {
       item.results = diff(previous_qd, current_qd);
     }
-    if (!new_epoch && item.results.added.empty() && item.results.removed.empty()) {
+    if (!new_epoch && item.results.hasNoResults()) {
       update_db = false;
     }
   } else {
@@ -216,7 +216,7 @@ Status Query::addNewResults(QueryDataTyped current_qd,
     }
   }
 
-  if (new_epoch && !(item.previous_remaining.added.empty() && item.previous_remaining.removed.empty())) {
+  if (new_epoch && !item.previous_remaining.hasNoResults()) {
     auto status = incrementCounter(false, false, item.previous_remaining_counter);
     if (!status.ok()) {
       return status;
@@ -307,19 +307,21 @@ inline void getLegacyFieldsAndDecorations(const JSON& doc, QueryLogItem& item) {
 }
 
 Status serializeQueryLogItem(bool is_previous_remaining, const QueryLogItem& item, JSON& doc) {
-  const auto* dr = &item.results;
-  if (is_previous_remaining) {
-    dr = &item.previous_remaining;
-  }  
-  if (dr->added.size() > 0 || dr->removed.size() > 0) {
-    auto obj = doc.getObject();
-    auto status =
-      serializeDiffResults(*dr, doc, obj, FLAGS_logger_numerics);
-    if (!status.ok()) {
-      return status;
+  if (!item.results.hasNoResults() || !item.previous_remaining.hasNoResults()) {
+    const auto* dr = &item.results;
+    if (is_previous_remaining) {
+      dr = &item.previous_remaining;
     }
+    if (!dr->hasNoResults()) {
+      auto obj = doc.getObject();
+      auto status =
+        serializeDiffResults(*dr, doc, obj, FLAGS_logger_numerics);
+      if (!status.ok()) {
+        return status;
+      }
 
-    doc.add("diffResults", obj);
+      doc.add("diffResults", obj);
+    }
   } else {
     auto arr = doc.getArray();
     auto status = serializeQueryData(
@@ -353,11 +355,11 @@ Status serializeEvent(bool is_previous_remaining,
 
 Status _serializeQueryLogItemAsEvents(bool is_previous_remaining, const QueryLogItem& item, JSON& doc) {
   auto temp_doc = JSON::newObject();
-  const auto* dr = &item.results;
-  if (is_previous_remaining) {
-    dr = &item.previous_remaining;
-  }
-  if (!dr->added.empty() || !dr->removed.empty()) {
+  if (!item.results.hasNoResults() || !item.previous_remaining.hasNoResults()) {
+    const auto* dr = &item.results;
+    if (is_previous_remaining) {
+      dr = &item.previous_remaining;
+    }
     auto status = serializeDiffResults(
         *dr, temp_doc, temp_doc.doc(), FLAGS_logger_numerics);
     if (!status.ok()) {

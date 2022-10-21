@@ -35,14 +35,15 @@ class Status;
  */
 struct QueryLogItem {
  public:
+
   /// Differential results from the query.
   DiffResults results;
 
+  /// Differential results from previous epoch that were not reported yet (if in a new epoch).
+  DiffResults previous_remaining;
+
   /// Optional snapshot results, no differential applied.
   QueryDataTyped snapshot_results;
-
-  /// Results from the previous epoch that were not reported yet (if this is a new epoch).
-  DiffResults previous_remaining;
 
   /// Counter for the previous_epoch_remaining (if non-empty);
   uint64_t previous_remaining_counter;
