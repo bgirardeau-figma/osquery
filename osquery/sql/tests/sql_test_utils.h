@@ -55,6 +55,7 @@ std::pair<std::string, DiffResults> getSerializedDiffResultsJSON();
 // is a string which should serialize to pair->second. pair->second
 // should deserialize to pair->first
 std::pair<JSON, QueryLogItem> getSerializedQueryLogItem();
-std::pair<std::string, QueryLogItem> getSerializedQueryLogItemJSON();
+std::pair<std::vector<std::string>, QueryLogItem>
+getSerializedQueryLogItemJSON();
 
 } // namespace osquery

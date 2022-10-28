@@ -209,7 +209,8 @@ TEST_F(QueryTests, test_query_name_updated) {
   QueryLogItem item;
   item.counter = 128;
   auto results = getTestDBExpectedResults();
-  cf.addNewResults(results, item);
+  auto status = cf.addNewResults(results, item);
+  EXPECT_EQ(status.toString(), "OK");
   EXPECT_FALSE(cf.isNewQuery());
   EXPECT_EQ(item.counter, 0UL);
   EXPECT_FALSE(item.results.hasNoResults());
@@ -219,7 +220,8 @@ TEST_F(QueryTests, test_query_name_updated) {
   auto cf2 = Query("will_update_query", query);
   EXPECT_TRUE(cf2.isQueryNameInDatabase());
   EXPECT_TRUE(cf2.isNewQuery());
-  cf2.addNewResults(results, item);
+  status = cf2.addNewResults(results, item);
+  EXPECT_EQ(status.toString(), "OK");
   EXPECT_FALSE(cf2.isNewQuery());
   EXPECT_EQ(item.counter, 1UL);
   EXPECT_TRUE(item.results.hasNoResults());

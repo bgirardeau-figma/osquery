@@ -110,7 +110,7 @@ TEST_F(ResultsTests, test_serialize_diff_results_json) {
 
 TEST_F(ResultsTests, test_serialize_query_log_item) {
   auto results = getSerializedQueryLogItem();
-  auto doc = JSON::newObject();
+  auto doc = JSON::newArray();
   auto s = serializeQueryLogItem(results.second, doc);
   EXPECT_TRUE(s.ok());
   EXPECT_EQ(s.toString(), "OK");
@@ -119,11 +119,14 @@ TEST_F(ResultsTests, test_serialize_query_log_item) {
 
 TEST_F(ResultsTests, test_serialize_query_log_item_json) {
   auto results = getSerializedQueryLogItemJSON();
-  std::string json;
-  auto s = serializeQueryLogItemJSON(results.second, json);
+  std::vector<std::string> json_items;
+  auto s = serializeQueryLogItemJSON(results.second, json_items);
   EXPECT_TRUE(s.ok());
   EXPECT_EQ(s.toString(), "OK");
-  EXPECT_EQ(results.first, json);
+  EXPECT_EQ(json_items.size(), results.first.size());
+  for (size_t i = 0; i < results.first.size(); i++) {
+    EXPECT_EQ(results.first[i], json_items[i]);
+  }
 }
 
 TEST_F(ResultsTests, test_adding_duplicate_rows_to_query_data) {

@@ -41,6 +41,10 @@ struct QueryLogItem {
   /// Differential results from the query.
   DiffResults results;
 
+  /// Differential results from previous epoch that were not reported yet (if in
+  /// a new epoch).
+  DiffResults previous_remaining;
+
   /// Optional snapshot results, no differential applied.
   QueryDataTyped snapshot_results;
 
@@ -53,7 +57,7 @@ struct QueryLogItem {
   /// The time that the query was executed, seconds as UNIX time.
   uint64_t time{0};
 
-  /// The epoch at the time the query was executed
+  /// The epoch the query results are placed in ("current epoch")
   uint64_t epoch{};
 
   /// The epoch when the query previously had results
@@ -61,6 +65,9 @@ struct QueryLogItem {
 
   /// Query execution counter for current epoch
   uint64_t counter{0};
+
+  /// Counter for the previous_epoch_remaining (if non-empty);
+  uint64_t previous_remaining_counter;
 
   /// The time that the query was executed, an ASCII string.
   std::string calendar_time;
@@ -80,7 +87,9 @@ struct QueryLogItem {
 };
 
 /**
- * @brief Serialize a QueryLogItem object into a JSON document.
+ * @brief Serialize a QueryLogItem object into a JSON document array.
+ *
+ * See serializeQueryLogItemJSON for description of the array entries.
  *
  * @param item the QueryLogItem to serialize.
  * @param doc [output] the output JSON document (object type).
@@ -90,14 +99,20 @@ struct QueryLogItem {
 Status serializeQueryLogItem(const QueryLogItem& item, JSON& doc);
 
 /**
- * @brief Serialize a QueryLogItem object into a JSON string.
+ * @brief Serialize a QueryLogItem object into a list of JSON strings.
+ *
+ * The resulting array will have 1 or 2 entries depending if there is
+ * an entry for the remaining differential results of the previous epoch,
+ * which are logged separately. This allows consumers to ignore counter=0
+ * entries without missing any differential events.
  *
  * @param item the QueryLogItem to serialize.
  * @param json [output] the output JSON string.
  *
  * @return Status indicating the success or failure of the operation.
  */
-Status serializeQueryLogItemJSON(const QueryLogItem& item, std::string& json);
+Status serializeQueryLogItemJSON(const QueryLogItem& item,
+                                 std::vector<std::string>& items);
 
 /**
  * @brief Serialize a QueryLogItem object into a JSON document containing

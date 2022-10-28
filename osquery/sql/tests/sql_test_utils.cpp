@@ -8,6 +8,7 @@
  */
 
 #include <osquery/sql/tests/sql_test_utils.h>
+#include <osquery/utils/json/json.h>
 
 namespace osquery {
 
@@ -142,7 +143,7 @@ std::pair<JSON, DiffResults> getSerializedDiffResults() {
 std::pair<JSON, QueryLogItem> getSerializedQueryLogItem() {
   std::pair<JSON, QueryLogItem> p;
   QueryLogItem i;
-  JSON doc = JSON::newObject();
+  JSON arrDoc = JSON::newArray();
   auto dr = getSerializedDiffResults();
   i.isSnapshot = false;
   i.results = std::move(dr.second);
@@ -154,6 +155,7 @@ std::pair<JSON, QueryLogItem> getSerializedQueryLogItem() {
   i.previous_epoch = 0LL;
   i.counter = 0LL;
 
+  auto doc = JSON::newObject();
   auto diff_doc = doc.getObject();
   diff_doc.Swap(dr.first.doc());
   doc.add("diffResults", diff_doc);
@@ -165,8 +167,10 @@ std::pair<JSON, QueryLogItem> getSerializedQueryLogItem() {
   doc.add("previous_epoch", std::size_t{0});
   doc.add("counter", std::size_t{0});
   doc.add("numerics", FLAGS_logger_numerics);
+  auto row = &doc.doc();
+  arrDoc.push(*row);
 
-  return std::make_pair(std::move(doc), std::move(i));
+  return std::make_pair(std::move(arrDoc), std::move(i));
 }
 
 std::pair<JSON, QueryDataTyped> getSerializedQueryDataWithColumnOrder() {
@@ -191,10 +195,16 @@ std::pair<std::string, DiffResults> getSerializedDiffResultsJSON() {
   return std::make_pair(output, std::move(results.second));
 }
 
-std::pair<std::string, QueryLogItem> getSerializedQueryLogItemJSON() {
+std::pair<std::vector<std::string>, QueryLogItem>
+getSerializedQueryLogItemJSON() {
   auto results = getSerializedQueryLogItem();
-  std::string output;
-  results.first.toString(output);
+  std::vector<std::string> output;
+  for (auto& entry : results.first.doc().GetArray()) {
+    rapidjson::StringBuffer sb;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(sb);
+    entry.Accept(writer);
+    output.push_back(sb.GetString());
+  }
   return std::make_pair(output, std::move(results.second));
 }
 

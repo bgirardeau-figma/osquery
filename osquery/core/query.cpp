@@ -183,7 +183,7 @@ Status Query::addNewResults(QueryDataTyped current_qd,
   // query data, otherwise the content is moved to the differential's added set.
   const auto* target_gd = &current_qd;
   bool update_db = true;
-  if (!new_epoch && calculate_diff) {
+  if (!(new_epoch && new_query) && calculate_diff) {
     // Get the rows from the last run of this query name.
     QueryDataSet previous_qd;
     auto status = getPreviousQueryResults(previous_qd);
@@ -191,10 +191,20 @@ Status Query::addNewResults(QueryDataTyped current_qd,
       return status;
     }
 
-    // Calculate the differential between previous and current query results.
-    item.results = diff(previous_qd, current_qd);
-
-    update_db = (!item.results.hasNoResults());
+    if (new_epoch) {
+      // If this is a new epoch, we first finish reporting the changes in the
+      // previous epoch then report a snapshot of all results to start off the
+      // new epoch. Reporting the changes in the previous epoch ensures
+      // consumers can filter out the snapshot at the start of an epoch (to
+      // avoid re-processing duplicate events), while still not missing any
+      // changes.
+      item.previous_remaining = diff(previous_qd, current_qd);
+      item.results.added = std::move(current_qd);
+      target_gd = &item.results.added;
+    } else {
+      item.results = diff(previous_qd, current_qd);
+      update_db = !item.results.hasNoResults();
+    }
   } else {
     item.results.added = std::move(current_qd);
     target_gd = &item.results.added;
@@ -209,6 +219,14 @@ Status Query::addNewResults(QueryDataTyped current_qd,
     }
 
     status = saveQueryResults(json, item.epoch);
+    if (!status.ok()) {
+      return status;
+    }
+  }
+
+  if (new_epoch && !item.previous_remaining.hasNoResults()) {
+    auto status =
+        incrementCounter(false, new_query, item.previous_remaining_counter);
     if (!status.ok()) {
       return status;
     }
@@ -245,6 +263,7 @@ Status deserializeDiffResults(const rj::Value& doc, DiffResults& dr) {
 }
 
 inline void addLegacyFieldsAndDecorations(const QueryLogItem& item,
+                                          bool is_previous_remaining,
                                           JSON& doc,
                                           rj::Document& obj) {
   // Apply legacy fields.
@@ -252,9 +271,16 @@ inline void addLegacyFieldsAndDecorations(const QueryLogItem& item,
   doc.addRef("hostIdentifier", item.identifier, obj);
   doc.addRef("calendarTime", item.calendar_time, obj);
   doc.add("unixTime", item.time, obj);
-  doc.add("epoch", static_cast<size_t>(item.epoch), obj);
-  doc.add("previous_epoch", static_cast<size_t>(item.previous_epoch), obj);
-  doc.add("counter", static_cast<size_t>(item.counter), obj);
+  if (is_previous_remaining) {
+    doc.add("epoch", static_cast<size_t>(item.previous_epoch), obj);
+    doc.add("previous_epoch", static_cast<size_t>(item.previous_epoch), obj);
+    doc.add(
+        "counter", static_cast<size_t>(item.previous_remaining_counter), obj);
+  } else {
+    doc.add("epoch", static_cast<size_t>(item.epoch), obj);
+    doc.add("previous_epoch", static_cast<size_t>(item.previous_epoch), obj);
+    doc.add("counter", static_cast<size_t>(item.counter), obj);
+  }
 
   // Apply field indicating if numerics are serialized as numbers
   doc.add("numerics", FLAGS_logger_numerics, obj);
@@ -290,37 +316,65 @@ inline void getLegacyFieldsAndDecorations(const JSON& doc, QueryLogItem& item) {
   item.time = doc.doc()["unixTime"].GetUint64();
 }
 
-Status serializeQueryLogItem(const QueryLogItem& item, JSON& doc) {
+Status serializeQueryLogItemHelper(const QueryLogItem& item,
+                                   bool is_previous_remaining,
+                                   JSON& doc) {
+  auto temp_doc = JSON::newObject();
   if (!item.isSnapshot) {
-    auto obj = doc.getObject();
+    const auto* dr = &item.results;
+    if (is_previous_remaining) {
+      dr = &item.previous_remaining;
+      // Don't emit an empty entry for previous remaining as it's only used to
+      // ensure differential results are complete (vs as a snapshot).
+      if (dr->hasNoResults()) {
+        return Status::success();
+      }
+    }
+    auto obj = temp_doc.getObject();
     auto status =
-        serializeDiffResults(item.results, doc, obj, FLAGS_logger_numerics);
+        serializeDiffResults(*dr, temp_doc, obj, FLAGS_logger_numerics);
     if (!status.ok()) {
       return status;
     }
 
-    doc.add("diffResults", obj);
+    temp_doc.add("diffResults", obj);
   } else {
-    auto arr = doc.getArray();
+    if (is_previous_remaining) {
+      // snapshots never include a previous remaining entry
+      return Status::success();
+    }
+    auto arr = temp_doc.getArray();
     auto status = serializeQueryData(
-        item.snapshot_results, doc, arr, FLAGS_logger_numerics);
+        item.snapshot_results, temp_doc, arr, FLAGS_logger_numerics);
     if (!status.ok()) {
       return status;
     }
 
-    doc.add("snapshot", arr);
-    doc.addRef("action", "snapshot");
+    temp_doc.add("snapshot", arr);
+    temp_doc.addRef("action", "snapshot");
   }
 
-  addLegacyFieldsAndDecorations(item, doc, doc.doc());
+  addLegacyFieldsAndDecorations(
+      item, is_previous_remaining, temp_doc, temp_doc.doc());
+  auto entry = &temp_doc.doc();
+  doc.push(*entry);
   return Status::success();
 }
 
+Status serializeQueryLogItem(const QueryLogItem& item, JSON& doc) {
+  auto status = serializeQueryLogItemHelper(item, false, doc);
+  if (!status.ok()) {
+    return status;
+  }
+  return serializeQueryLogItemHelper(item, true, doc);
+}
+
 Status serializeEvent(const QueryLogItem& item,
+                      bool is_previous_remaining,
                       const rj::Value& event_obj,
                       JSON& doc,
                       rj::Document& obj) {
-  addLegacyFieldsAndDecorations(item, doc, obj);
+  addLegacyFieldsAndDecorations(item, is_previous_remaining, doc, obj);
   auto columns_obj = doc.getObject();
   for (const auto& i : event_obj.GetObject()) {
     // Yield results as a "columns." map to avoid namespace collisions.
@@ -330,10 +384,16 @@ Status serializeEvent(const QueryLogItem& item,
   return Status::success();
 }
 
-Status serializeQueryLogItemAsEvents(const QueryLogItem& item, JSON& doc) {
+Status serializeQueryLogItemAsEventsHelper(const QueryLogItem& item,
+                                           bool is_previous_remaining,
+                                           JSON& doc) {
   auto temp_doc = JSON::newObject();
   if (!item.isSnapshot) {
-    if (!item.results.hasNoResults()) {
+    const auto* dr = &item.results;
+    if (is_previous_remaining) {
+      dr = &item.previous_remaining;
+    }
+    if (!dr->hasNoResults()) {
       auto status = serializeDiffResults(
           item.results, temp_doc, temp_doc.doc(), FLAGS_logger_numerics);
       if (!status.ok()) {
@@ -343,7 +403,7 @@ Status serializeQueryLogItemAsEvents(const QueryLogItem& item, JSON& doc) {
       return Status::success();
     }
   } else {
-    if (!item.snapshot_results.empty()) {
+    if (!item.snapshot_results.empty() && !is_previous_remaining) {
       auto arr = doc.getArray();
       auto status = serializeQueryData(
           item.snapshot_results, temp_doc, arr, FLAGS_logger_numerics);
@@ -359,7 +419,7 @@ Status serializeQueryLogItemAsEvents(const QueryLogItem& item, JSON& doc) {
   for (auto& action : temp_doc.doc().GetObject()) {
     for (auto& row : action.value.GetArray()) {
       auto obj = doc.getObject();
-      serializeEvent(item, row, doc, obj);
+      serializeEvent(item, is_previous_remaining, row, doc, obj);
       doc.addCopy("action", action.name.GetString(), obj);
       doc.push(obj);
     }
@@ -367,14 +427,30 @@ Status serializeQueryLogItemAsEvents(const QueryLogItem& item, JSON& doc) {
   return Status::success();
 }
 
-Status serializeQueryLogItemJSON(const QueryLogItem& item, std::string& json) {
-  auto doc = JSON::newObject();
+Status serializeQueryLogItemAsEvents(const QueryLogItem& item, JSON& doc) {
+  auto status = serializeQueryLogItemAsEventsHelper(item, true, doc);
+  if (!status.ok()) {
+    return status;
+  }
+
+  return serializeQueryLogItemAsEventsHelper(item, false, doc);
+}
+
+Status serializeQueryLogItemJSON(const QueryLogItem& item,
+                                 std::vector<std::string>& items) {
+  auto doc = JSON::newArray();
   auto status = serializeQueryLogItem(item, doc);
   if (!status.ok()) {
     return status;
   }
 
-  return doc.toString(json);
+  for (auto& entry : doc.doc().GetArray()) {
+    rj::StringBuffer sb;
+    rj::Writer<rj::StringBuffer> writer(sb);
+    entry.Accept(writer);
+    items.push_back(sb.GetString());
+  }
+  return Status::success();
 }
 
 Status serializeQueryLogItemAsEventsJSON(const QueryLogItem& item,
