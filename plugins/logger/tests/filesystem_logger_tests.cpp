@@ -155,6 +155,7 @@ TEST_F(FilesystemLoggerTests, test_log_snapshot) {
   item.time = 0;
   item.calendar_time = "test";
   item.epoch = 0L;
+  item.previous_epoch = 0L;
   item.counter = 0L;
 
   EXPECT_TRUE(logSnapshotQuery(item));
@@ -170,11 +171,13 @@ TEST_F(FilesystemLoggerTests, test_log_snapshot) {
   std::string expected =
       "{\"snapshot\":[],\"action\":\"snapshot\",\"name\":\"test\","
       "\"hostIdentifier\":\"test\",\"calendarTime\":\"test\","
-      "\"unixTime\":0,\"epoch\":0,\"counter\":0,\"numerics\":" +
+      "\"unixTime\":0,\"epoch\":0,\"previous_epoch\":0,\"counter\":0,"
+      "\"numerics\":" +
       std::string(FLAGS_logger_numerics ? "true" : "false") +
       "}\n{\"snapshot\":[],\"action\":\"snapshot\","
       "\"name\":\"test\",\"hostIdentifier\":\"test\",\"calendarTime\":\"test\","
-      "\"unixTime\":0,\"epoch\":0,\"counter\":0,\"numerics\":" +
+      "\"unixTime\":0,\"epoch\":0,\"previous_epoch\":0,\"counter\":0,"
+      "\"numerics\":" +
       std::string(FLAGS_logger_numerics ? "true" : "false") + "}\n";
   EXPECT_EQ(content, expected);
 }

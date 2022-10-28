@@ -74,12 +74,15 @@ TEST_F(QueryTests, test_get_query_status) {
   auto query = getOsqueryScheduledQuery();
   auto cf = Query("query_status", query);
 
+  uint64_t previous_epoch = 5;
+
   // We have never seen this query before (it has no results yet either).
   bool new_epoch = false;
   bool new_query = false;
-  cf.getQueryStatus(100, new_epoch, new_query);
+  cf.getQueryStatus(100, previous_epoch, new_epoch, new_query);
   EXPECT_TRUE(new_epoch);
   EXPECT_TRUE(new_query);
+  EXPECT_EQ(0, previous_epoch);
 
   // Add results for this query (this action is not under test).
   uint64_t counter = 0;
@@ -89,16 +92,18 @@ TEST_F(QueryTests, test_get_query_status) {
   // The query has results and the query text has not changed.
   new_epoch = false;
   new_query = false;
-  cf.getQueryStatus(100, new_epoch, new_query);
+  cf.getQueryStatus(100, previous_epoch, new_epoch, new_query);
   EXPECT_FALSE(new_epoch);
   EXPECT_FALSE(new_query);
+  EXPECT_EQ(100, previous_epoch);
 
   // The epoch changed so the previous results are invalid.
   new_epoch = false;
   new_query = false;
-  cf.getQueryStatus(101, new_epoch, new_query);
+  cf.getQueryStatus(101, previous_epoch, new_epoch, new_query);
   EXPECT_TRUE(new_epoch);
   EXPECT_FALSE(new_query);
+  EXPECT_EQ(100, previous_epoch);
 
   // Add results for the new epoch (this action is not under test).
   status = cf.addNewResults(getTestDBExpectedResults(), 101, counter);
@@ -109,9 +114,10 @@ TEST_F(QueryTests, test_get_query_status) {
   new_query = false;
   query.query += " LIMIT 1";
   auto cf2 = Query("query_status", query);
-  cf2.getQueryStatus(101, new_epoch, new_query);
+  cf2.getQueryStatus(101, previous_epoch, new_epoch, new_query);
   EXPECT_FALSE(new_epoch);
   EXPECT_TRUE(new_query);
+  EXPECT_EQ(101, previous_epoch);
 }
 
 TEST_F(QueryTests, test_add_and_get_current_results) {
@@ -135,15 +141,15 @@ TEST_F(QueryTests, test_add_and_get_current_results) {
     EXPECT_EQ(status.toString(), "OK");
 
     // Add the "current" results and output the differentials.
-    DiffResults dr;
-    counter = 128;
-    auto s = cf.addNewResults(result.second, 0, counter, dr, true);
+    QueryLogItem item;
+    item.counter = 128;
+    auto s = cf.addNewResults(result.second, item);
     EXPECT_TRUE(s.ok());
-    EXPECT_EQ(counter, expected_counter++);
+    EXPECT_EQ(item.counter, expected_counter++);
 
     // Call the diffing utility directly.
     DiffResults expected = diff(previous_qd, result.second);
-    EXPECT_EQ(dr, expected);
+    EXPECT_EQ(item.results, expected);
 
     // After Query::addNewResults the previous results are now current.
     QueryDataSet qds_previous;
@@ -200,23 +206,23 @@ TEST_F(QueryTests, test_query_name_updated) {
   EXPECT_TRUE(cf.isNewQuery());
   EXPECT_TRUE(cf.isNewQuery());
 
-  DiffResults dr;
-  uint64_t counter = 128;
+  QueryLogItem item;
+  item.counter = 128;
   auto results = getTestDBExpectedResults();
-  cf.addNewResults(results, 0, counter, dr);
+  cf.addNewResults(results, item);
   EXPECT_FALSE(cf.isNewQuery());
-  EXPECT_EQ(counter, 0UL);
-  EXPECT_FALSE(dr.hasNoResults());
+  EXPECT_EQ(item.counter, 0UL);
+  EXPECT_FALSE(item.results.hasNoResults());
 
   query.query += " LIMIT 1";
-  counter = 128;
+  item.counter = 128;
   auto cf2 = Query("will_update_query", query);
   EXPECT_TRUE(cf2.isQueryNameInDatabase());
   EXPECT_TRUE(cf2.isNewQuery());
-  cf2.addNewResults(results, 0, counter, dr);
+  cf2.addNewResults(results, item);
   EXPECT_FALSE(cf2.isNewQuery());
-  EXPECT_EQ(counter, 1UL);
-  EXPECT_TRUE(dr.hasNoResults());
+  EXPECT_EQ(item.counter, 1UL);
+  EXPECT_TRUE(item.results.hasNoResults());
 }
 
 TEST_F(QueryTests, test_get_stored_query_names) {

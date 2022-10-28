@@ -108,10 +108,9 @@ static void DATABASE_query_results(benchmark::State& state) {
   auto qd = getExampleQueryData(state.range(0), state.range(1));
   auto query = getOsqueryScheduledQuery();
   while (state.KeepRunning()) {
-    DiffResults diff_results;
-    uint64_t counter;
+    QueryLogItem item;
     auto dbq = Query("default", query);
-    dbq.addNewResults(std::move(qd), 0, counter, diff_results);
+    dbq.addNewResults(std::move(qd), item);
   }
 }
 

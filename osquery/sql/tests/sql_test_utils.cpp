@@ -151,6 +151,7 @@ std::pair<JSON, QueryLogItem> getSerializedQueryLogItem() {
   i.time = 1408993857;
   i.identifier = "foobaz";
   i.epoch = 0LL;
+  i.previous_epoch = 0LL;
   i.counter = 0LL;
 
   auto diff_doc = doc.getObject();
@@ -161,6 +162,7 @@ std::pair<JSON, QueryLogItem> getSerializedQueryLogItem() {
   doc.addRef("calendarTime", "Mon Aug 25 12:10:57 2014");
   doc.add("unixTime", 1408993857);
   doc.add("epoch", std::size_t{0});
+  doc.add("previous_epoch", std::size_t{0});
   doc.add("counter", std::size_t{0});
   doc.add("numerics", FLAGS_logger_numerics);
 

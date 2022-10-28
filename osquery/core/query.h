@@ -56,6 +56,9 @@ struct QueryLogItem {
   /// The epoch at the time the query was executed
   uint64_t epoch{};
 
+  /// The epoch when the query previously had results
+  uint64_t previous_epoch{};
+
   /// Query execution counter for current epoch
   uint64_t counter{0};
 
@@ -203,6 +206,7 @@ class Query {
 
   /// Determines if this is a first run or new query.
   void getQueryStatus(uint64_t epoch,
+                      uint64_t& previous_epoch,
                       bool& fresh_results,
                       bool& new_query) const;
 
@@ -236,24 +240,18 @@ class Query {
    * indicating what rows in the query's results have changed.
    *
    * @param qd the QueryDataTyped object containing query results to store.
-   * @param epoch the epoch associated with QueryData
-   * @param counter the output that holds the query execution counter.
-   * @param dr an output to a DiffResults object populated based on last run.
-   * @param calculate_diff default true to populate dr.
+   * @param item the QueryLogItem associated with QueryData that will hold
+   * results. It should already have the epoch set, while counter,
+   * previous_epoch, and results fields are outputs.
    *
    * @return the success or failure of the operation.
    */
   Status addNewResults(QueryDataTyped qd,
-                       uint64_t epoch,
-                       uint64_t& counter,
-                       DiffResults& dr,
+                       QueryLogItem& item,
                        bool calculate_diff = true) const;
 
   /// A version of adding new results for events-based queries.
-  Status addNewEvents(QueryDataTyped current_qd,
-                      const uint64_t current_epoch,
-                      uint64_t& counter,
-                      DiffResults& dr) const;
+  Status addNewEvents(QueryDataTyped current_qd, QueryLogItem& item) const;
 
   /**
    * @brief The most recent result set for a scheduled query.

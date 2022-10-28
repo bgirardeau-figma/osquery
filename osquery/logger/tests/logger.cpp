@@ -353,6 +353,7 @@ TEST_F(LoggerTests, test_logger_scheduled_query) {
   item.time = 0;
   item.calendar_time = "no_time";
   item.epoch = 0L;
+  item.previous_epoch = 0L;
   item.counter = 0L;
   item.isSnapshot = false;
   item.results.added.push_back({{"test_column", "test_value"}});
@@ -374,7 +375,7 @@ TEST_F(LoggerTests, test_logger_scheduled_query) {
   std::string expected =
       "{\"name\":\"test_query\",\"hostIdentifier\":\"unknown_test_host\","
       "\"calendarTime\":\"no_time\",\"unixTime\":0,\"epoch\":0,"
-      "\"counter\":0,\"numerics\":" +
+      "\"previous_epoch\":0,\"counter\":0,\"numerics\":" +
       std::string(FLAGS_logger_numerics ? "true" : "false") +
       ",\"columns\":{\"test_column\":\"test_value\"},\"action\":\"added\"}";
   EXPECT_EQ(LoggerTests::log_lines.back(), expected);
@@ -390,6 +391,7 @@ TEST_F(LoggerTests, test_logger_numeric_flag) {
   item.time = 0;
   item.calendar_time = "no_time";
   item.epoch = 0L;
+  item.previous_epoch = 0L;
   item.counter = 0L;
   item.isSnapshot = false;
   item.results.added.push_back({{"test_double_column", 2.000}});
@@ -401,7 +403,8 @@ TEST_F(LoggerTests, test_logger_numeric_flag) {
   // FLAGS_logger_numerics is true (as we set it, above)
   std::string expected =
       "{\"name\":\"test_query\",\"hostIdentifier\":\"unknown_test_host\","
-      "\"calendarTime\":\"no_time\",\"unixTime\":0,\"epoch\":0,"
+      "\"calendarTime\":\"no_time\",\"unixTime\":0,\"epoch\":0,\"previous_"
+      "epoch\":0,"
       "\"counter\":0,\"numerics\":true,\"columns\":{\"test_double_"
       "column\":2.0},\"action\":\"added\"}";
   EXPECT_EQ(LoggerTests::log_lines.back(), expected);
@@ -412,7 +415,8 @@ TEST_F(LoggerTests, test_logger_numeric_flag) {
   // when FLAGS_logger_numerics is false (as we set it, above)
   expected =
       "{\"name\":\"test_query\",\"hostIdentifier\":\"unknown_test_host\","
-      "\"calendarTime\":\"no_time\",\"unixTime\":0,\"epoch\":0,"
+      "\"calendarTime\":\"no_time\",\"unixTime\":0,\"epoch\":0,\"previous_"
+      "epoch\":0,"
       "\"counter\":0,\"numerics\":false,\"columns\":{\"test_double_"
       "column\":\"2.0\"},\"action\":\"added\"}";
   EXPECT_EQ(LoggerTests::log_lines.back(), expected);

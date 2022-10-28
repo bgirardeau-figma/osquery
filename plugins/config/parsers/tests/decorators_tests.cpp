@@ -93,6 +93,7 @@ TEST_F(DecoratorsConfigParserPluginTests, test_decorators_run_interval) {
 
   QueryLogItem item;
   item.epoch = 0L;
+  item.previous_epoch = 0L;
   item.counter = 0L;
   item.isSnapshot = true;
   getDecorations(item.decorations);
@@ -104,7 +105,7 @@ TEST_F(DecoratorsConfigParserPluginTests, test_decorators_run_interval) {
   std::string expected =
       "{\"snapshot\":[],\"action\":\"snapshot\",\"name\":\"\","
       "\"hostIdentifier\":\"\",\"calendarTime\":\"\",\"unixTime\":0,"
-      "\"epoch\":0,\"counter\":0,\"numerics\":" +
+      "\"epoch\":0,\"previous_epoch\":0,\"counter\":0,\"numerics\":" +
       std::string(FLAGS_logger_numerics ? "true" : "false") +
       ",\"decorations\":{\"internal_60_test\":\"test\",\"one\":\"1\"}}";
   EXPECT_EQ(log_line, expected);

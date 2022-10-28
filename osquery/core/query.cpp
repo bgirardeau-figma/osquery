@@ -109,15 +109,17 @@ bool Query::isNewQuery() const {
 }
 
 void Query::getQueryStatus(uint64_t epoch,
+                           uint64_t& previous_epoch,
                            bool& new_epoch,
                            bool& new_query) const {
+  previous_epoch = getPreviousEpoch();
   if (!isQueryNameInDatabase()) {
     // This is the first encounter of the scheduled query.
     new_epoch = true;
     new_query = true;
     LOG(INFO) << "Storing initial results for new scheduled query: " << name_;
     saveQuery(name_, query_);
-  } else if (getPreviousEpoch() != epoch) {
+  } else if (previous_epoch != epoch) {
     new_epoch = true;
     LOG(INFO) << "New Epoch " << epoch << " for scheduled query " << name_;
   } else if (isNewQuery()) {
@@ -136,21 +138,19 @@ Status Query::incrementCounter(bool all_records,
 }
 
 Status Query::addNewEvents(QueryDataTyped current_qd,
-                           const uint64_t current_epoch,
-                           uint64_t& counter,
-                           DiffResults& dr) const {
+                           QueryLogItem& item) const {
   bool new_epoch = false;
   bool new_query = false;
-  getQueryStatus(current_epoch, new_epoch, new_query);
+  getQueryStatus(item.epoch, item.previous_epoch, new_epoch, new_query);
   if (new_epoch) {
-    auto status = saveQueryResults("[]", current_epoch);
+    auto status = saveQueryResults("[]", item.epoch);
     if (!status.ok()) {
       return status;
     }
   }
-  dr.added = std::move(current_qd);
-  if (!dr.added.empty()) {
-    auto status = incrementCounter(false, new_epoch || new_query, counter);
+  item.results.added = std::move(current_qd);
+  if (!item.results.added.empty()) {
+    auto status = incrementCounter(false, new_epoch || new_query, item.counter);
     if (!status.ok()) {
       return status;
     }
@@ -162,17 +162,21 @@ Status Query::addNewResults(QueryDataTyped qd,
                             const uint64_t epoch,
                             uint64_t& counter) const {
   DiffResults dr;
-  return addNewResults(std::move(qd), epoch, counter, dr, false);
+  QueryLogItem item;
+  item.epoch = epoch;
+  auto status = addNewResults(std::move(qd), item, false);
+  if (status.ok()) {
+    counter = item.counter;
+  }
+  return status;
 }
 
 Status Query::addNewResults(QueryDataTyped current_qd,
-                            const uint64_t current_epoch,
-                            uint64_t& counter,
-                            DiffResults& dr,
+                            QueryLogItem& item,
                             bool calculate_diff) const {
   bool new_epoch = false;
   bool new_query = false;
-  getQueryStatus(current_epoch, new_epoch, new_query);
+  getQueryStatus(item.epoch, item.previous_epoch, new_epoch, new_query);
 
   // Use a 'target' avoid copying the query data when serializing and saving.
   // If a differential is requested and needed the target remains the original
@@ -188,12 +192,12 @@ Status Query::addNewResults(QueryDataTyped current_qd,
     }
 
     // Calculate the differential between previous and current query results.
-    dr = diff(previous_qd, current_qd);
+    item.results = diff(previous_qd, current_qd);
 
-    update_db = (!dr.added.empty() || !dr.removed.empty());
+    update_db = (!item.results.hasNoResults());
   } else {
-    dr.added = std::move(current_qd);
-    target_gd = &dr.added;
+    item.results.added = std::move(current_qd);
+    target_gd = &item.results.added;
   }
 
   if (update_db) {
@@ -204,14 +208,14 @@ Status Query::addNewResults(QueryDataTyped current_qd,
       return status;
     }
 
-    status = saveQueryResults(json, current_epoch);
+    status = saveQueryResults(json, item.epoch);
     if (!status.ok()) {
       return status;
     }
   }
 
   if (update_db || new_epoch || new_query) {
-    auto status = incrementCounter(new_epoch, new_query, counter);
+    auto status = incrementCounter(new_epoch, new_query, item.counter);
     if (!status.ok()) {
       return status;
     }
@@ -249,6 +253,7 @@ inline void addLegacyFieldsAndDecorations(const QueryLogItem& item,
   doc.addRef("calendarTime", item.calendar_time, obj);
   doc.add("unixTime", item.time, obj);
   doc.add("epoch", static_cast<size_t>(item.epoch), obj);
+  doc.add("previous_epoch", static_cast<size_t>(item.previous_epoch), obj);
   doc.add("counter", static_cast<size_t>(item.counter), obj);
 
   // Apply field indicating if numerics are serialized as numbers

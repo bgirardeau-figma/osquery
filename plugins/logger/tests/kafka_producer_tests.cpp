@@ -112,7 +112,9 @@ TEST_F(KafkaProducerPluginTest, getMsgName_tests) {
        "\"1501097303\",\"superblock_version\":\"1.2\",\"unused_devices\":\"<"
        "none>\",\"working_disks\":\"6\"}],\"action\":\"snapshot\",\"name\":"
        "\"bar\",\"hostIdentifier\":\"node151\",\"calendarTime\":\"Wed Jul "
-       "26 19:29:22 2017 UTC\",\"unixTime\":\"1501097362\",\"epoch\":\"0\"}",
+       "26 19:29:22 2017 "
+       "UTC\",\"unixTime\":\"1501097362\",\"epoch\":\"0\",\"previous_epoch\":"
+       "\"0\"}",
        "bar"},
       {"{\"snapshot\":[{\"active_disks\":\"6\",\"bitmap_chunk_size\":\"\","
        "\"bitmap_external_file\":\"\",\"bitmap_on_mem\":\"\",\"check_array_"
@@ -141,7 +143,9 @@ TEST_F(KafkaProducerPluginTest, getMsgName_tests) {
        "\"1501097303\",\"superblock_version\":\"1.2\",\"unused_devices\":\"<"
        "none>\",\"working_disks\":\"6\"}],\"action\":\"snapshot\","
        "\"hostIdentifier\":\"node151\",\"calendarTime\":\"Wed Jul "
-       "26 19:29:22 2017 UTC\",\"unixTime\":\"1501097362\",\"epoch\":\"0\"}",
+       "26 19:29:22 2017 "
+       "UTC\",\"unixTime\":\"1501097362\",\"epoch\":\"0\",\"previous_epoch\":"
+       "\"0\"}",
        ""},
       // batch mode result without "name" column(s)
       {"{\"diffResults\":{\"removed\":[{\"cmdline\":\"\",\"on_disk\":\"-1\","
@@ -183,7 +187,8 @@ TEST_F(KafkaProducerPluginTest, getMsgName_tests) {
        "\"hostIdentifier\""
        ":\"ip-172-22-1-112\",\"calendarTime\":\"Sat May 16 03:33:36 2020 "
        "UTC\",\"unixTi"
-       "me\":1589600016,\"epoch\":0,\"counter\":1,\"numerics\":false}",
+       "me\":1589600016,\"epoch\":0,\"previous_epoch\":0,\"counter\":1,"
+       "\"numerics\":false}",
        "pack_sample_running_processes"},
       // batch mode result with "name" column(s)
       {"{\"diffResults\":{\"removed\":[{\"cmdline\":\"\",\"on_disk\":\"-1\","
@@ -228,7 +233,8 @@ TEST_F(KafkaProducerPluginTest, getMsgName_tests) {
        "\"hostIde"
        "ntifier\":\"ip-172-22-1-112\",\"calendarTime\":\"Sat May 16 03:33:36 "
        "2020 UTC\","
-       "\"unixTime\":1589600016,\"epoch\":0,\"counter\":1,\"numerics\":false}",
+       "\"unixTime\":1589600016,\"epoch\":0,\"previous_epoch\":0,\"counter\":1,"
+       "\"numerics\":false}",
        "pack_sample_running_processes"},
       // event mode result without "name" column
       {"{\"name\":\"pack_sample_running_processes\",\"hostIdentifier\":\"ip-"
